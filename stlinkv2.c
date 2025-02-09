@@ -318,6 +318,41 @@ static void stlink2_high_speed(programmer_t *pgm) {
 }
 #endif
 
+static bool swim_check_status(programmer_t *pgm) {
+  unsigned char status[4];
+  int retries;
+
+  for (retries = 0; retries < 20; retries++) {
+    stlink2_cmd(pgm, 2, STLINK_SWIM, SWIM_READSTATUS);
+    msg_recv(pgm, status, 4);
+    DEBUG_PRINT("        status %02x %02x %02x %02x\n", status[0], status[1],
+                status[2], status[3]);
+    if (status[0] == STLINK_SWIM_OK) {
+      return true;
+    }
+    if (status[0] == STLINK_SWIM_NO_RESPONSE) {
+      return false;
+    }
+    usleep(1000);
+  }
+  return false;
+}
+
+static void swim_enter_seq(programmer_t *pgm) {
+  int retries;
+
+  for (retries = 0; retries < 10; retries++) {
+    stlink2_cmd(pgm, 2, STLINK_SWIM, SWIM_ENTER_SEQ);
+    if (swim_check_status(pgm)) {
+      printf("SWIM enter sequence succeeded (%d retries)\n", retries);
+      return;
+    }
+    stlink2_cmd(pgm, 2, STLINK_SWIM, SWIM_RESET);
+    swim_check_status(pgm);
+  }
+  ERROR("SWIM enter sequence failed");
+}
+
 bool stlink2_open(programmer_t *pgm) {
 	unsigned char buf[8];
 	unsigned int v;
@@ -371,7 +406,8 @@ bool stlink2_open(programmer_t *pgm) {
 
 	swim_cmd(pgm, 2, STLINK_SWIM, SWIM_ASSERT_RESET);
 
-	swim_cmd(pgm, 2, STLINK_SWIM, SWIM_ENTER_SEQ);
+	// swim_cmd(pgm, 2, STLINK_SWIM, SWIM_ENTER_SEQ);
+	swim_enter_seq(pgm);
 
 	// Mask internal interrupt sources, enable access to whole of memory,
 	// prioritize SWIM and stall the CPU.
